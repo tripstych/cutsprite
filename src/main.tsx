@@ -1977,11 +1977,25 @@ class SliceTool {
       
       // Draw the background image portion for this slice
       if (this.backgroundImage) {
-        spriteCtx.drawImage(
-          this.backgroundImage,
-          slice.x, slice.y, slice.width, slice.height,
-          x, y, slice.width, slice.height
-        )
+        // Calculate source coordinates on the background image (same as createSliceImageData)
+        const sourceX = (slice.x - this.imageOffsetX) / this.imageScale
+        const sourceY = (slice.y - this.imageOffsetY) / this.imageScale
+        const sourceWidth = slice.width / this.imageScale
+        const sourceHeight = slice.height / this.imageScale
+        
+        // Ensure we don't try to draw outside the image bounds
+        const clampedSourceX = Math.max(0, Math.min(sourceX, this.backgroundImage.width))
+        const clampedSourceY = Math.max(0, Math.min(sourceY, this.backgroundImage.height))
+        const clampedSourceWidth = Math.min(sourceWidth, this.backgroundImage.width - clampedSourceX)
+        const clampedSourceHeight = Math.min(sourceHeight, this.backgroundImage.height - clampedSourceY)
+        
+        if (clampedSourceWidth > 0 && clampedSourceHeight > 0) {
+          spriteCtx.drawImage(
+            this.backgroundImage,
+            clampedSourceX, clampedSourceY, clampedSourceWidth, clampedSourceHeight,
+            x, y, slice.width, slice.height
+          )
+        }
       }
     })
     
@@ -2120,12 +2134,23 @@ class SliceTool {
         animations[currentGroup.name.replace(/\s+/g, '_')] = groupSliceNames
       }
     } else {
-      // For sprite sheet, include all groups
-      groups.forEach(group => {
-        if (group.slices.length > 0) {
-          const groupSliceNames = group.slices.map(slice => `slice_${slice.id}`)
-          animations[group.name.replace(/\s+/g, '_')] = groupSliceNames
+      // For sprite sheet, use the same allSlices array to ensure consistency
+      // Create a map of group names to their slice IDs from allSlices
+      const groupSliceMap: { [groupName: string]: string[] } = {}
+      
+      allSlices.forEach(slice => {
+        if (slice.group) {
+          const groupName = slice.group.name.replace(/\s+/g, '_')
+          if (!groupSliceMap[groupName]) {
+            groupSliceMap[groupName] = []
+          }
+          groupSliceMap[groupName].push(`slice_${slice.id}`)
         }
+      })
+      
+      // Use the map to create animations
+      Object.keys(groupSliceMap).forEach(groupName => {
+        animations[groupName] = groupSliceMap[groupName]
       })
     }
 
