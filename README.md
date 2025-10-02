@@ -2,6 +2,8 @@
 
 A powerful web-based sprite sheet cutting tool built with React, TypeScript, and Vite. CutSprite allows you to load sprite sheet images, create precise slices, organize them into groups, and export them in various formats.
 
+![CutSprite Screenshot](Screenshot.png)
+
 ## Features
 
 ### 🖼️ Image Management
