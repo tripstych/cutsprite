@@ -24,6 +24,88 @@ function App() {
               <div>Current Group: <span id="current-group-name">Group 1</span></div>
             </div>
             
+            <div id="anchor-panel">
+              <h5>Anchors</h5>
+              <div id="group-anchor-control" className="anchor-control">
+                <div className="anchor-label">Group Default Anchor</div>
+                <div className="anchor-inputs">
+                  <div className="anchor-input-group">
+                    <label>X:</label>
+                    <input type="number" min="0" max="1" step="0.1" className="anchor-input anchor-x-input" id="group-anchor-x" />
+                  </div>
+                  <div className="anchor-input-group">
+                    <label>Y:</label>
+                    <input type="number" min="0" max="1" step="0.1" className="anchor-input anchor-y-input" id="group-anchor-y" />
+                  </div>
+                </div>
+                <div className="anchor-preset">
+                  <label>Preset:</label>
+                  <select className="anchor-preset-select" id="group-anchor-preset">
+                    <option value="">Custom</option>
+                    <option value="TOP_LEFT">Top Left (0,0)</option>
+                    <option value="TOP_CENTER">Top Center (0.5,0)</option>
+                    <option value="TOP_RIGHT">Top Right (1,0)</option>
+                    <option value="CENTER_LEFT">Center Left (0,0.5)</option>
+                    <option value="CENTER">Center (0.5,0.5)</option>
+                    <option value="CENTER_RIGHT">Center Right (1,0.5)</option>
+                    <option value="BOTTOM_LEFT">Bottom Left (0,1)</option>
+                    <option value="BOTTOM_CENTER">Bottom Center (0.5,1)</option>
+                    <option value="BOTTOM_RIGHT">Bottom Right (1,1)</option>
+                  </select>
+                </div>
+                <div className="anchor-visual">
+                  <div className="anchor-grid" id="group-anchor-grid">
+                    <div className="anchor-custom-point" id="group-anchor-indicator"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="slice-anchor-controls" id="slice-anchor-controls">
+                <div className="anchor-inherit-toggle">
+                  <input type="checkbox" id="slice-anchor-inherit" className="anchor-inherit-checkbox" />
+                  <label htmlFor="slice-anchor-inherit">Inherit from group</label>
+                </div>
+                
+                <div id="slice-anchor-control" className="anchor-control">
+                  <div className="anchor-label">Slice Anchor</div>
+                  <div className="anchor-inputs">
+                    <div className="anchor-input-group">
+                      <label>X:</label>
+                      <input type="number" min="0" max="1" step="0.1" className="anchor-input anchor-x-input" id="slice-anchor-x" />
+                    </div>
+                    <div className="anchor-input-group">
+                      <label>Y:</label>
+                      <input type="number" min="0" max="1" step="0.1" className="anchor-input anchor-y-input" id="slice-anchor-y" />
+                    </div>
+                  </div>
+                  <div className="anchor-preset">
+                    <label>Preset:</label>
+                    <select className="anchor-preset-select" id="slice-anchor-preset">
+                      <option value="">Custom</option>
+                      <option value="TOP_LEFT">Top Left (0,0)</option>
+                      <option value="TOP_CENTER">Top Center (0.5,0)</option>
+                      <option value="TOP_RIGHT">Top Right (1,0)</option>
+                      <option value="CENTER_LEFT">Center Left (0,0.5)</option>
+                      <option value="CENTER">Center (0.5,0.5)</option>
+                      <option value="CENTER_RIGHT">Center Right (1,0.5)</option>
+                      <option value="BOTTOM_LEFT">Bottom Left (0,1)</option>
+                      <option value="BOTTOM_CENTER">Bottom Center (0.5,1)</option>
+                      <option value="BOTTOM_RIGHT">Bottom Right (1,1)</option>
+                    </select>
+                  </div>
+                  <div className="anchor-visual">
+                    <div className="anchor-grid" id="slice-anchor-grid">
+                      <div className="anchor-custom-point" id="slice-anchor-indicator"></div>
+                    </div>
+                  </div>
+                  <div id="slice-anchor-info" className="anchor-info">
+                    <div className="anchor-position-info">Position: <span id="slice-anchor-position">0, 0</span></div>
+                    <div className="anchor-size-info">Size: <span id="slice-size-info">0 × 0</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
             <div id="image-controls">
               <h5>Background Image</h5>
               <div id="image-toolbar">
@@ -47,11 +129,18 @@ function App() {
               <p>⌨️ Delete/Backspace: Remove selected</p>
               <p>⌨️ Escape: Clear all</p>
               <p>⌨️ Shift+Arrows: Move background image</p>
+              <hr />
+              <p><strong>Anchors:</strong></p>
+              <p>🎯 <span style={{color: '#ffaa00'}}>●</span> Inherited anchor (from group)</p>
+              <p>🎯 <span style={{color: '#ff6600'}}>●</span> Custom slice anchor</p>
+              <p>📍 0,0 = top-left, 1,1 = bottom-right</p>
             </div>
           </div>
         </div>
         
         <div id="main-content">
+
+          <div id="slice-images-wrapper">
           <div id="slice-images-container">
             <div id="slice-images-header">
               <h3>Slice Images</h3>
@@ -60,6 +149,7 @@ function App() {
                 <button id="export-all-images" title="Export all slices as ZIP file">🗂️ ZIP File</button>
               </div>
             </div>
+
             <div id="slice-images"></div>
             <div id="slice-controls">
               <button className="prev-button" id="prev-frame-btn" title="Previous frame"></button>
@@ -72,8 +162,28 @@ function App() {
               </div>
             </div>
           </div>
+          </div>
+
           <div id="container">
             <canvas id="canvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      {/* Custom Modal Dialog */}
+      <div id="modal-overlay" className="modal-overlay" style={{display: 'none'}}>
+        <div id="modal-dialog" className="modal-dialog">
+          <div className="modal-header">
+            <h4 id="modal-title">Input Required</h4>
+            <button id="modal-close" className="modal-close-btn">&times;</button>
+          </div>
+          <div className="modal-body">
+            <label id="modal-message" htmlFor="modal-input">Please enter a value:</label>
+            <input type="text" id="modal-input" className="modal-input" autoFocus />
+          </div>
+          <div className="modal-footer">
+            <button id="modal-cancel" className="modal-btn modal-btn-cancel">Cancel</button>
+            <button id="modal-ok" className="modal-btn modal-btn-ok">OK</button>
           </div>
         </div>
       </div>

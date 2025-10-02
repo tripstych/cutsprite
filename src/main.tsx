@@ -4,31 +4,105 @@ import './index.css'
 import App from './App.tsx'
 import $ from 'jquery'
 import JSZip from 'jszip'
-
-interface Groups {
-  name: string,
-  color: string,
-  default_anchor: string,
-  slices: Slices[]
-}
+import type { Anchor, Groups, Slices } from './types'
+import { ANCHOR_PRESETS } from './types'
 
 let groups: Groups[] = [{
   name: "Group 1",
   color: "#ff6b6b",
-  default_anchor: "0.5, 0.5",
+  default_anchor: ANCHOR_PRESETS.CENTER,
   slices: []
 }]
 let currentGroup = groups[0];
 
-interface Slices {
-  id: number,
-  group: Groups | null,
-  x: number
-  y: number
-  width: number
-  height: number
-  color: string
-  selected: boolean
+// Custom Modal Functions
+function showModal(title: string, message: string, defaultValue: string = ''): Promise<string | null> {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('modal-overlay') as HTMLElement;
+    const titleElement = document.getElementById('modal-title') as HTMLElement;
+    const messageElement = document.getElementById('modal-message') as HTMLElement;
+    const input = document.getElementById('modal-input') as HTMLInputElement;
+    const okBtn = document.getElementById('modal-ok') as HTMLButtonElement;
+    const cancelBtn = document.getElementById('modal-cancel') as HTMLButtonElement;
+    const closeBtn = document.getElementById('modal-close') as HTMLButtonElement;
+
+    // Check if all elements exist
+    if (!overlay || !titleElement || !messageElement || !input || !okBtn || !cancelBtn || !closeBtn) {
+      console.error('Modal elements not found. Make sure the modal HTML is rendered.');
+      resolve(null);
+      return;
+    }
+
+    // Set modal content
+    titleElement.textContent = title;
+    messageElement.textContent = message;
+    input.value = defaultValue;
+    
+    // Show modal
+    overlay.style.display = 'flex';
+    
+    // Focus input and select text
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 100);
+
+    // Handle OK button
+    const handleOk = () => {
+      const value = input.value.trim();
+      hideModal();
+      resolve(value || null);
+    };
+
+    // Handle Cancel/Close
+    const handleCancel = () => {
+      hideModal();
+      resolve(null);
+    };
+
+    // Handle Enter key
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleOk();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleCancel();
+      }
+    };
+
+    // Add event listeners
+    okBtn.onclick = handleOk;
+    cancelBtn.onclick = handleCancel;
+    closeBtn.onclick = handleCancel;
+    overlay.onclick = (e) => {
+      if (e.target === overlay) handleCancel();
+    };
+    input.onkeydown = handleKeyPress;
+  });
+}
+
+function hideModal() {
+  const overlay = document.getElementById('modal-overlay') as HTMLElement;
+  if (!overlay) return;
+  
+  overlay.style.display = 'none';
+  
+  // Clean up event listeners
+  const okBtn = document.getElementById('modal-ok') as HTMLButtonElement;
+  const cancelBtn = document.getElementById('modal-cancel') as HTMLButtonElement;
+  const closeBtn = document.getElementById('modal-close') as HTMLButtonElement;
+  const input = document.getElementById('modal-input') as HTMLInputElement;
+  
+  if (okBtn) okBtn.onclick = null;
+  if (cancelBtn) cancelBtn.onclick = null;
+  if (closeBtn) closeBtn.onclick = null;
+  if (input) input.onkeydown = null;
+}
+
+// Custom prompt replacement
+async function customPrompt(message: string, defaultValue: string = ''): Promise<string | null> {
+  return await showModal('Input Required', message, defaultValue);
 }
 
 class SliceTool {
@@ -489,6 +563,7 @@ class SliceTool {
           height: Math.abs(height),
           color: currentGroup.color,
           selected: true,
+          anchor: currentGroup.default_anchor,
           group: currentGroup
         }
         currentGroup.slices.push(newRect)
@@ -533,7 +608,7 @@ class SliceTool {
     }
   }
 
-  private draw() {
+  public draw() {
     // Clear canvas
     this.ctx.fillStyle = 'lightgray'
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
@@ -583,11 +658,17 @@ class SliceTool {
       // Draw selection handles for selected rectangle
       if (rect.selected) {
         this.drawSelectionHandles(rect)
+        this.drawAnchorPoint(rect)
       }
     })
     
-    // Update slice images if they need refreshing
-    this.updateSliceImages()
+    // Update slice images only when not in fast animation mode
+    if (!this.isPlaying || this.fps <= 12) {
+      this.updateSliceImages()
+    }
+    
+    // Update anchor controls based on selection
+    this.updateAnchorControls()
   }
 
   private drawSnapLines() {
@@ -671,6 +752,42 @@ class SliceTool {
     })
   }
 
+  private drawAnchorPoint(rect: Slices) {
+    const effectiveAnchor = this.getEffectiveSliceAnchor(rect)
+    
+    // Calculate anchor position within the slice
+    const anchorX = rect.x + (rect.width * effectiveAnchor.x)
+    const anchorY = rect.y + (rect.height * effectiveAnchor.y)
+    
+    // Draw anchor cross
+    this.ctx.strokeStyle = rect.anchor ? '#ff6600' : '#ffaa00' // Orange for custom, yellow for inherited
+    this.ctx.lineWidth = 2
+    this.ctx.setLineDash([])
+    
+    const crossSize = 8
+    
+    // Draw crosshair
+    this.ctx.beginPath()
+    this.ctx.moveTo(anchorX - crossSize, anchorY)
+    this.ctx.lineTo(anchorX + crossSize, anchorY)
+    this.ctx.moveTo(anchorX, anchorY - crossSize)
+    this.ctx.lineTo(anchorX, anchorY + crossSize)
+    this.ctx.stroke()
+    
+    // Draw center circle
+    this.ctx.fillStyle = rect.anchor ? '#ff6600' : '#ffaa00'
+    this.ctx.beginPath()
+    this.ctx.arc(anchorX, anchorY, 3, 0, 2 * Math.PI)
+    this.ctx.fill()
+    
+    // Draw border around center circle
+    this.ctx.strokeStyle = '#ffffff'
+    this.ctx.lineWidth = 1
+    this.ctx.beginPath()
+    this.ctx.arc(anchorX, anchorY, 3, 0, 2 * Math.PI)
+    this.ctx.stroke()
+  }
+
   public deleteSelected() {
     const selectedSlices = this.slices.filter(slice => slice.selected)
     selectedSlices.forEach(slice => {
@@ -729,7 +846,7 @@ class SliceTool {
   }
 
   // Group Management Functions
-  public createGroup(name: string, color: string, defaultAnchor: string = "0.5, 0.5"): Groups {
+  public createGroup(name: string, color: string, defaultAnchor: Anchor = ANCHOR_PRESETS.CENTER): Groups {
     const newGroup: Groups = {
       name,
       color,
@@ -792,6 +909,7 @@ class SliceTool {
     this.updateCurrentGroupDisplay()
     this.updateSliceImages()
     this.updateFrameCounter()
+    this.updateGroupAnchorVisual(group.default_anchor)
   }
 
   public updateCurrentGroupDisplay() {
@@ -800,6 +918,139 @@ class SliceTool {
       currentGroupName.text(currentGroup.name)
       currentGroupName.css('color', currentGroup.color)
     }
+    this.updateAnchorControls()
+  }
+
+  // Anchor Management Methods
+  public setGroupDefaultAnchor(group: Groups, anchor: Anchor) {
+    group.default_anchor = anchor
+    this.updateGroupsList()
+    this.updateAnchorControls()
+  }
+
+  public setSliceAnchor(slice: Slices, anchor: Anchor | undefined) {
+    slice.anchor = anchor
+    this.updateAnchorControls()
+  }
+
+  public getEffectiveSliceAnchor(slice: Slices): Anchor {
+    return slice.anchor || (slice.group ? slice.group.default_anchor : ANCHOR_PRESETS.CENTER)
+  }
+
+  private updateAnchorControls() {
+    // Update anchor controls visibility based on selection
+    const selectedSlices = this.slices.filter(s => s.selected)
+    const sliceAnchorControls = $('.slice-anchor-controls')
+    
+    if (selectedSlices.length === 1) {
+      sliceAnchorControls.addClass('visible')
+      this.updateSliceAnchorDisplay(selectedSlices[0])
+    } else {
+      sliceAnchorControls.removeClass('visible')
+    }
+  }
+
+  private updateSliceAnchorDisplay(slice: Slices) {
+    const hasCustomAnchor = slice.anchor !== undefined
+    const effectiveAnchor = this.getEffectiveSliceAnchor(slice)
+    
+    // Update the checkbox state
+    $('#slice-anchor-inherit').prop('checked', !hasCustomAnchor)
+    
+    // Update anchor display
+    if (hasCustomAnchor) {
+      // Show slice's custom anchor
+      this.displayAnchorInUI('slice-anchor-control', slice.anchor!)
+    } else {
+      // Show inherited anchor from group
+      this.displayAnchorInUI('slice-anchor-control', effectiveAnchor, true)
+    }
+    
+    // Update position and size info
+    this.updateSliceAnchorInfo(slice, effectiveAnchor)
+  }
+
+  public updateSliceAnchorInfo(slice: Slices, anchor: Anchor) {
+    // Calculate actual pixel position of the anchor within the slice
+    const anchorPixelX = Math.round(slice.width * anchor.x)
+    const anchorPixelY = Math.round(slice.height * anchor.y)
+    
+    // Update the info display
+    $('#slice-anchor-position').text(`${anchorPixelX}, ${anchorPixelY}`)
+    $('#slice-size-info').text(`${slice.width} × ${slice.height}`)
+  }
+
+  private displayAnchorInUI(containerId: string, anchor: Anchor, isInherited: boolean = false) {
+    const container = $(`#${containerId}`)
+    if (container.length === 0) return
+    
+    // Update the visual anchor control (this would integrate with React component)
+    // For now, just update some basic display elements
+    container.find('.anchor-x-input').val(anchor.x.toFixed(2))
+    container.find('.anchor-y-input').val(anchor.y.toFixed(2))
+    
+    if (isInherited) {
+      container.addClass('inherited')
+    } else {
+      container.removeClass('inherited')
+    }
+  }
+
+  public getSelectedSlices(): Slices[] {
+    return this.slices.filter(s => s.selected)
+  }
+
+  public updateGroupAnchorVisual(anchor: Anchor) {
+    const indicator = $('#group-anchor-indicator')
+    if (indicator.length > 0) {
+      indicator.css({
+        left: `${anchor.x * 100}%`,
+        top: `${anchor.y * 100}%`
+      })
+    }
+    
+    // Update input fields
+    $('#group-anchor-x').val(anchor.x.toFixed(2))
+    $('#group-anchor-y').val(anchor.y.toFixed(2))
+    
+    // Update preset selection
+    const presetKey = this.findAnchorPreset(anchor)
+    $('#group-anchor-preset').val(presetKey || '')
+  }
+
+  public updateSliceAnchorVisual(anchor: Anchor) {
+    const indicator = $('#slice-anchor-indicator')
+    if (indicator.length > 0) {
+      indicator.css({
+        left: `${anchor.x * 100}%`,
+        top: `${anchor.y * 100}%`
+      })
+    }
+    
+    // Update input fields
+    $('#slice-anchor-x').val(anchor.x.toFixed(2))
+    $('#slice-anchor-y').val(anchor.y.toFixed(2))
+    
+    // Update preset selection
+    const presetKey = this.findAnchorPreset(anchor)
+    $('#slice-anchor-preset').val(presetKey || '')
+  }
+
+  private findAnchorPreset(anchor: Anchor): string | null {
+    for (const [key, preset] of Object.entries(ANCHOR_PRESETS)) {
+      if (Math.abs(preset.x - anchor.x) < 0.001 && Math.abs(preset.y - anchor.y) < 0.001) {
+        return key
+      }
+    }
+    return null
+  }
+
+  public initializeAnchorControls() {
+    // Initialize group anchor controls with current group's default anchor
+    this.updateGroupAnchorVisual(currentGroup.default_anchor)
+    
+    // Initialize slice anchor controls (hidden by default)
+    $('.slice-anchor-controls').removeClass('visible')
   }
 
   public moveSliceToGroup(slice: Slices, targetGroup: Groups) {
@@ -877,7 +1128,7 @@ class SliceTool {
             </div>
           </div>
           <div class="group-details">
-            <div class="group-anchor">Anchor: ${group.default_anchor}</div>
+            <div class="group-anchor">Anchor: ${group.default_anchor.x.toFixed(2)}, ${group.default_anchor.y.toFixed(2)}</div>
           </div>
         </div>
       `)
@@ -905,11 +1156,11 @@ class SliceTool {
     })
     
     // Rename group
-    $('.btn-rename').off('click').on('click', (e) => {
+    $('.btn-rename').off('click').on('click', async (e) => {
       e.stopPropagation()
       const index = parseInt($(e.currentTarget).closest('.group-item').data('group-index'))
       const group = groups[index]
-      const newName = prompt('Enter new group name:', group.name)
+      const newName = await customPrompt('Enter new group name:', group.name)
       if (newName && newName.trim()) {
         this.renameGroup(group, newName.trim())
       }
@@ -959,7 +1210,8 @@ class SliceTool {
           x: slice.x,
           y: slice.y,
           width: slice.width,
-          height: slice.height
+          height: slice.height,
+          anchor: slice.anchor
         }))
       }))
     }
@@ -976,9 +1228,38 @@ class SliceTool {
       
       // Import groups and slices
       data.groups.forEach((groupData: any) => {
-        const group = this.createGroup(groupData.name, groupData.color, groupData.default_anchor)
+        // Handle legacy string format for anchors
+        let defaultAnchor = ANCHOR_PRESETS.CENTER
+        if (groupData.default_anchor) {
+          if (typeof groupData.default_anchor === 'string') {
+            // Parse legacy "x, y" string format
+            const parts = groupData.default_anchor.split(',').map((s: string) => parseFloat(s.trim()))
+            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+              defaultAnchor = { x: parts[0], y: parts[1] }
+            }
+          } else {
+            // Use new object format
+            defaultAnchor = groupData.default_anchor
+          }
+        }
+        
+        const group = this.createGroup(groupData.name, groupData.color, defaultAnchor)
         
         groupData.slices.forEach((sliceData: any) => {
+          // Handle individual slice anchors
+          let sliceAnchor: Anchor | undefined = undefined
+          if (sliceData.anchor) {
+            if (typeof sliceData.anchor === 'string') {
+              // Parse legacy "x, y" string format
+              const parts = sliceData.anchor.split(',').map((s: string) => parseFloat(s.trim()))
+              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                sliceAnchor = { x: parts[0], y: parts[1] }
+              }
+            } else {
+              sliceAnchor = sliceData.anchor
+            }
+          }
+          
           const slice: Slices = {
             id: this.nextId++,
             x: sliceData.x,
@@ -987,7 +1268,8 @@ class SliceTool {
             height: sliceData.height,
             color: group.color,
             selected: false,
-            group: group
+            group: group,
+            anchor: sliceAnchor
           }
           
           group.slices.push(slice)
@@ -1019,7 +1301,8 @@ class SliceTool {
           x: slice.x,
           y: slice.y,
           width: slice.width,
-          height: slice.height
+          height: slice.height,
+          anchor: slice.anchor
         }))
       })),
       currentGroup: {
@@ -1053,9 +1336,38 @@ class SliceTool {
       
       // Import groups and slices
       data.groups.forEach((groupData: any) => {
-        const group = this.createGroup(groupData.name, groupData.color, groupData.default_anchor)
+        // Handle legacy string format for anchors
+        let defaultAnchor = ANCHOR_PRESETS.CENTER
+        if (groupData.default_anchor) {
+          if (typeof groupData.default_anchor === 'string') {
+            // Parse legacy "x, y" string format
+            const parts = groupData.default_anchor.split(',').map((s: string) => parseFloat(s.trim()))
+            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+              defaultAnchor = { x: parts[0], y: parts[1] }
+            }
+          } else {
+            // Use new object format
+            defaultAnchor = groupData.default_anchor
+          }
+        }
+        
+        const group = this.createGroup(groupData.name, groupData.color, defaultAnchor)
         
         groupData.slices.forEach((sliceData: any) => {
+          // Handle individual slice anchors
+          let sliceAnchor: Anchor | undefined = undefined
+          if (sliceData.anchor) {
+            if (typeof sliceData.anchor === 'string') {
+              // Parse legacy "x, y" string format
+              const parts = sliceData.anchor.split(',').map((s: string) => parseFloat(s.trim()))
+              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                sliceAnchor = { x: parts[0], y: parts[1] }
+              }
+            } else {
+              sliceAnchor = sliceData.anchor
+            }
+          }
+          
           const slice: Slices = {
             id: this.nextId++,
             x: sliceData.x,
@@ -1064,7 +1376,8 @@ class SliceTool {
             height: sliceData.height,
             color: group.color,
             selected: false,
-            group: group
+            group: group,
+            anchor: sliceAnchor
           }
           
           group.slices.push(slice)
@@ -1414,19 +1727,20 @@ class SliceTool {
     this.updateSliceImages()
   }
 
-  public exportSliceImages() {
+  public async exportSliceImages() {
     if (!this.backgroundImage || !currentGroup || currentGroup.slices.length === 0) {
       alert('No slices to export!')
       return
     }
     
     // Show export options dialog
-    const exportOption = prompt(
+    const exportOption = await customPrompt(
       'Choose export option:\n' +
       '1 - Individual PNG files (current behavior)\n' +
       '2 - ZIP file with all slices\n' +
       '3 - Single combined sprite sheet\n' +
-      'Enter 1, 2, or 3:'
+      'Enter 1, 2, or 3:', 
+      '1'
     )
     
     switch (exportOption) {
@@ -1440,7 +1754,9 @@ class SliceTool {
         this.exportAsSpriteSheet()
         break
       default:
-        alert('Invalid option. Please choose 1, 2, or 3.')
+        if (exportOption) {
+          alert('Invalid option. Please choose 1, 2, or 3.')
+        }
     }
   }
   
@@ -1559,10 +1875,23 @@ class SliceTool {
     this.isPlaying = true
     this.isInAnimationMode = true
     this.updatePlayButton()
+    // Immediately switch to animation mode display
     this.highlightCurrentFrame()
     
     this.animationInterval = window.setInterval(() => {
-      this.nextFrame()
+      if (!currentGroup || currentGroup.slices.length <= 1) return
+      
+      // Lightweight frame advancement for smooth animation
+      this.currentFrame = (this.currentFrame + 1) % currentGroup.slices.length
+      this.updateFrameCounter()
+      this.highlightCurrentFrame()
+      
+      // Only update canvas selection for slower animations
+      if (this.fps <= 12 && currentGroup.slices[this.currentFrame]) {
+        this.slices.forEach(s => s.selected = false)
+        currentGroup.slices[this.currentFrame].selected = true
+        this.draw()
+      }
     }, 1000 / this.fps)
   }
   
@@ -1575,14 +1904,18 @@ class SliceTool {
     // Stay in animation mode when paused
     this.updatePlayButton()
     this.highlightCurrentFrame() // Refresh visibility
+    this.draw() // Single redraw when pausing
   }
   
   public stopAnimation() {
     this.pauseAnimation()
     this.isInAnimationMode = false // Exit animation mode
     this.currentFrame = 0
-    this.updateCurrentFrame()
+    this.updateFrameCounter()
     this.highlightCurrentFrame() // Refresh visibility - will show all frames
+    // Regenerate slice images to show all frames when stopping
+    this.updateSliceImages()
+    this.draw() // Full redraw when stopping
   }
   
   public nextFrame() {
@@ -1590,7 +1923,15 @@ class SliceTool {
     
     this.isInAnimationMode = true // Enter animation mode
     this.currentFrame = (this.currentFrame + 1) % currentGroup.slices.length
-    this.updateCurrentFrame()
+    this.updateFrameCounter()
+    this.highlightCurrentFrame()
+    
+    // Select the current frame slice on canvas
+    if (currentGroup.slices[this.currentFrame]) {
+      this.slices.forEach(s => s.selected = false)
+      currentGroup.slices[this.currentFrame].selected = true
+      this.draw()
+    }
   }
   
   public prevFrame() {
@@ -1598,7 +1939,15 @@ class SliceTool {
     
     this.isInAnimationMode = true // Enter animation mode
     this.currentFrame = this.currentFrame <= 0 ? currentGroup.slices.length - 1 : this.currentFrame - 1
-    this.updateCurrentFrame()
+    this.updateFrameCounter()
+    this.highlightCurrentFrame()
+    
+    // Select the current frame slice on canvas
+    if (currentGroup.slices[this.currentFrame]) {
+      this.slices.forEach(s => s.selected = false)
+      currentGroup.slices[this.currentFrame].selected = true
+      this.draw()
+    }
   }
   
   public setFPS(newFPS: number) {
@@ -1609,22 +1958,6 @@ class SliceTool {
     if (this.isPlaying) {
       this.pauseAnimation()
       this.playAnimation()
-    }
-  }
-  
-  private updateCurrentFrame() {
-    this.updateFrameCounter()
-    this.updateSliceImages()
-    this.highlightCurrentFrame()
-    
-    // Select the current frame slice on canvas
-    if (currentGroup && currentGroup.slices.length > 0) {
-      const currentSlice = currentGroup.slices[this.currentFrame]
-      if (currentSlice) {
-        this.slices.forEach(s => s.selected = false)
-        currentSlice.selected = true
-        this.draw()
-      }
     }
   }
   
@@ -1648,29 +1981,33 @@ class SliceTool {
   }
   
   private highlightCurrentFrame() {
-    $('.slice-item').removeClass('current-frame animating')
+    // Use direct style manipulation instead of CSS classes to avoid React re-renders
+    const $sliceItems = $('.slice-item')
     
     if (this.isInAnimationMode) {
-      // In animation mode, hide all frames except the current one
-      $('.slice-item').addClass('hidden-frame')
-    } else {
-      // Default state - show all frames
-      $('.slice-item').removeClass('hidden-frame')
-    }
-    
-    if (currentGroup && currentGroup.slices.length > 0) {
-      const currentSlice = currentGroup.slices[this.currentFrame]
-      if (currentSlice) {
-        const sliceElement = $(`.slice-item[data-slice-id="${currentSlice.id}"]`)
-        sliceElement.addClass('current-frame').removeClass('hidden-frame')
-        
-        if (this.isPlaying) {
-          sliceElement.addClass('animating')
+      // In animation mode, hide all frames first using direct style manipulation
+      $sliceItems.css('display', 'none').removeClass('current-frame animating')
+      $('#slice-images').addClass('animation-mode')
+      
+      // Show only the current frame
+      if (currentGroup && currentGroup.slices.length > 0) {
+        const currentSlice = currentGroup.slices[this.currentFrame]
+        if (currentSlice) {
+          const $currentElement = $(`.slice-item[data-slice-id="${currentSlice.id}"]`)
+          $currentElement.css('display', 'block').addClass('current-frame')
+          
+          if (this.isPlaying) {
+            $currentElement.addClass('animating')
+          }
+          
+          // Scroll to current frame in film strip
+          this.scrollToCurrentFrame($currentElement)
         }
-        
-        // Scroll to current frame in film strip
-        this.scrollToCurrentFrame(sliceElement)
       }
+    } else {
+      // Default state - show all frames using direct style manipulation
+      $sliceItems.css('display', 'block').removeClass('current-frame animating hidden-frame')
+      $('#slice-images').removeClass('animation-mode')
     }
   }
   
@@ -1694,86 +2031,276 @@ class SliceTool {
   }
 }
 
+// Button click handler functions
+async function addGroup() {
+  const name = await customPrompt('Enter group name:', `Group ${groups.length + 1}`)
+  if (name && name.trim()) {
+    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dda0dd', '#98d8c8']
+    const color = colors[groups.length % colors.length]
+    const newGroup = rectangleTool.createGroup(name.trim(), color)
+    rectangleTool.setCurrentGroup(newGroup)
+  }
+}
+
+function saveProject() {
+  const projectData = rectangleTool.saveProject()
+  const blob = new Blob([projectData], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'sprite_project.json'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function loadProject() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json'
+  input.onchange = (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const content = e.target?.result as string
+        rectangleTool.loadProject(content)
+      }
+      reader.readAsText(file)
+    }
+  }
+  input.click()
+}
+
+function exportSingleImage() {
+  rectangleTool.exportAsSpriteSheet()
+}
+
+function exportAllImages() {
+  rectangleTool.exportAsZip()
+}
+
+function playPause() {
+  rectangleTool.playAnimation()
+}
+
+function stop() {
+  rectangleTool.stopAnimation()
+}
+
+function prevFrame() {
+  rectangleTool.prevFrame()
+}
+
+function nextFrame() {
+  rectangleTool.nextFrame()
+}
+
+function loadImage() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (file) {
+      rectangleTool.loadImage(file)
+    }
+  }
+  input.click()
+}
+
+function removeImage() {
+  rectangleTool.removeImage()
+}
+
+function resetImage() {
+  rectangleTool.resetImageTransform()
+}
+
+function zoomIn() {
+  rectangleTool.scaleImage(1.2)
+}
+
+function zoomOut() {
+  rectangleTool.scaleImage(0.8)
+}
+
+// Global reference to rectangleTool for functions
+let rectangleTool: SliceTool
+
 $(document).ready(() => {
   const canvas = $('#canvas')[0] as HTMLCanvasElement
   canvas.width = 1280
   canvas.height = 720
   
-  const rectangleTool = new SliceTool(canvas)
+  rectangleTool = new SliceTool(canvas)
   
   // Initialize groups UI
   rectangleTool.updateGroupsList()
   rectangleTool.updateCurrentGroupDisplay()
   rectangleTool.updateSliceImages()
+  rectangleTool.initializeAnchorControls()
   
   // Add new group button
-  $('#add-group-btn').on('click', () => {
-    const name = prompt('Enter group name:', `Group ${groups.length + 1}`)
-    if (name && name.trim()) {
-      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dda0dd', '#98d8c8']
-      const color = colors[groups.length % colors.length]
-      const newGroup = rectangleTool.createGroup(name.trim(), color)
-      rectangleTool.setCurrentGroup(newGroup)
-    }
-  })
+  $('#add-group-btn').on('click', addGroup)
   
   // Project Save/Load functionality
-  $('#save-project-btn').on('click', () => {
-    const projectData = rectangleTool.saveProject()
-    const blob = new Blob([projectData], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'sprite_project.json'
-    a.click()
-    URL.revokeObjectURL(url)
-  })
+  $('#save-project-btn').on('click', saveProject)
+  $('#load-project-btn').on('click', loadProject)
   
-  $('#load-project-btn').on('click', () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json'
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          const content = e.target?.result as string
-          rectangleTool.loadProject(content)
-        }
-        reader.readAsText(file)
-      }
-    }
-    input.click()
-  })
-  
-  // Export as single sprite sheet image
-  $('#export-single-image').on('click', () => {
-    rectangleTool.exportAsSpriteSheet()
-  })
-  
-  // Export all images as ZIP file
-  $('#export-all-images').on('click', () => {
-    rectangleTool.exportAsZip()
-  })
+  // Export buttons
+  $('#export-single-image').on('click', exportSingleImage)
+  $('#export-all-images').on('click', exportAllImages)
   
   // Animation controls
-  $('#play-pause-btn').on('click', () => {
-    rectangleTool.playAnimation()
+  $('#play-pause-btn').on('click', playPause)
+  $('#stop-btn').on('click', stop)
+  $('#prev-frame-btn').on('click', prevFrame)
+  $('#next-frame-btn').on('click', nextFrame)
+  
+  // Anchor control event handlers
+  
+  // Group anchor controls
+  $('#group-anchor-x, #group-anchor-y').on('input', () => {
+    const x = Math.max(0, Math.min(1, parseFloat($('#group-anchor-x').val() as string) || 0))
+    const y = Math.max(0, Math.min(1, parseFloat($('#group-anchor-y').val() as string) || 0))
+    rectangleTool.setGroupDefaultAnchor(currentGroup, { x, y })
+    rectangleTool.updateGroupAnchorVisual({ x, y })
+    rectangleTool.draw() // Redraw canvas to show updated anchor positions
   })
   
-  $('#stop-btn').on('click', () => {
-    rectangleTool.stopAnimation()
+  $('#group-anchor-preset').on('change', () => {
+    const presetKey = $('#group-anchor-preset').val() as string
+    if (presetKey && (ANCHOR_PRESETS as any)[presetKey]) {
+      const preset = (ANCHOR_PRESETS as any)[presetKey]
+      $('#group-anchor-x').val(preset.x.toFixed(2))
+      $('#group-anchor-y').val(preset.y.toFixed(2))
+      rectangleTool.setGroupDefaultAnchor(currentGroup, preset)
+      rectangleTool.updateGroupAnchorVisual(preset)
+      rectangleTool.draw() // Redraw canvas to show updated anchor positions
+    }
   })
   
-  $('#prev-frame-btn').on('click', () => {
-    rectangleTool.prevFrame()
+  // Slice anchor controls
+  $('#slice-anchor-inherit').on('change', () => {
+    const selectedSlices = rectangleTool.getSelectedSlices()
+    if (selectedSlices.length === 1) {
+      const slice = selectedSlices[0]
+      const isInherit = $('#slice-anchor-inherit').prop('checked')
+      if (isInherit) {
+        rectangleTool.setSliceAnchor(slice, undefined)
+      } else {
+        // Set to current group's default anchor as starting point
+        rectangleTool.setSliceAnchor(slice, currentGroup.default_anchor)
+        $('#slice-anchor-x').val(currentGroup.default_anchor.x.toFixed(2))
+        $('#slice-anchor-y').val(currentGroup.default_anchor.y.toFixed(2))
+        rectangleTool.updateSliceAnchorVisual(currentGroup.default_anchor)
+        rectangleTool.updateSliceAnchorInfo(slice, currentGroup.default_anchor)
+      }
+      rectangleTool.draw() // Redraw canvas to show updated anchor positions
+    }
   })
   
-  $('#next-frame-btn').on('click', () => {
-    rectangleTool.nextFrame()
+  $('#slice-anchor-x, #slice-anchor-y').on('input', () => {
+    const selectedSlices = rectangleTool.getSelectedSlices()
+    if (selectedSlices.length === 1) {
+      const x = Math.max(0, Math.min(1, parseFloat($('#slice-anchor-x').val() as string) || 0))
+      const y = Math.max(0, Math.min(1, parseFloat($('#slice-anchor-y').val() as string) || 0))
+      const anchor = { x, y }
+      rectangleTool.setSliceAnchor(selectedSlices[0], anchor)
+      rectangleTool.updateSliceAnchorVisual(anchor)
+      rectangleTool.updateSliceAnchorInfo(selectedSlices[0], anchor)
+      rectangleTool.draw() // Redraw canvas to show updated anchor positions
+    }
   })
   
+  $('#slice-anchor-preset').on('change', () => {
+    const selectedSlices = rectangleTool.getSelectedSlices()
+    if (selectedSlices.length === 1) {
+      const presetKey = $('#slice-anchor-preset').val() as string
+      if (presetKey && (ANCHOR_PRESETS as any)[presetKey]) {
+        const preset = (ANCHOR_PRESETS as any)[presetKey]
+        $('#slice-anchor-x').val(preset.x.toFixed(2))
+        $('#slice-anchor-y').val(preset.y.toFixed(2))
+        rectangleTool.setSliceAnchor(selectedSlices[0], preset)
+        rectangleTool.updateSliceAnchorVisual(preset)
+        rectangleTool.updateSliceAnchorInfo(selectedSlices[0], preset)
+      }
+      rectangleTool.draw() // Redraw canvas to show updated anchor positions
+    }
+  })
+
+  // Visual anchor grid interactions
+  $('#group-anchor-grid').on('click', (e) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    const y = (e.clientY - rect.top) / rect.height
+    
+    // Clamp values to valid range
+    const anchorX = Math.max(0, Math.min(1, x))
+    const anchorY = Math.max(0, Math.min(1, y))
+    
+    // Update inputs and anchor
+    $('#group-anchor-x').val(anchorX.toFixed(2))
+    $('#group-anchor-y').val(anchorY.toFixed(2))
+    rectangleTool.setGroupDefaultAnchor(currentGroup, { x: anchorX, y: anchorY })
+    rectangleTool.updateGroupAnchorVisual({ x: anchorX, y: anchorY })
+    rectangleTool.draw()
+  })
+
+  $('#slice-anchor-grid').on('click', (e) => {
+    const selectedSlices = rectangleTool.getSelectedSlices()
+    if (selectedSlices.length === 1) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      const x = (e.clientX - rect.left) / rect.width
+      const y = (e.clientY - rect.top) / rect.height
+      
+      // Clamp values to valid range
+      const anchorX = Math.max(0, Math.min(1, x))
+      const anchorY = Math.max(0, Math.min(1, y))
+      
+      // Update inputs and anchor
+      $('#slice-anchor-x').val(anchorX.toFixed(2))
+      $('#slice-anchor-y').val(anchorY.toFixed(2))
+      const newAnchor = { x: anchorX, y: anchorY }
+      rectangleTool.setSliceAnchor(selectedSlices[0], newAnchor)
+      rectangleTool.updateSliceAnchorVisual(newAnchor)
+      rectangleTool.updateSliceAnchorInfo(selectedSlices[0], newAnchor)
+      rectangleTool.draw()
+      
+      // Uncheck inherit if it was checked
+      $('#slice-anchor-inherit').prop('checked', false)
+    }
+  })
+
+  // Hover tooltips for anchor grids
+  $('#group-anchor-grid, #slice-anchor-grid').on('mousemove', (e) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    const y = (e.clientY - rect.top) / rect.height
+    
+    // Clamp values to valid range
+    const anchorX = Math.max(0, Math.min(1, x))
+    const anchorY = Math.max(0, Math.min(1, y))
+    
+    // Create or update tooltip
+    let tooltip = $('.anchor-tooltip')
+    if (tooltip.length === 0) {
+      tooltip = $('<div class="anchor-tooltip"></div>')
+      $('body').append(tooltip)
+    }
+    
+    tooltip.text(`${anchorX.toFixed(2)}, ${anchorY.toFixed(2)}`)
+    tooltip.css({
+      left: e.clientX + 'px',
+      top: e.clientY + 'px',
+      display: 'block'
+    })
+  })
+
+  $('#group-anchor-grid, #slice-anchor-grid').on('mouseleave', () => {
+    $('.anchor-tooltip').hide()
+  })
+
   // Global click handler to hide context menu
   $(document).on('click', (e) => {
     if (!$(e.target).closest('#slice-context-menu').length) {
@@ -1815,35 +2342,12 @@ $(document).ready(() => {
     }
   })
   
-  // Image loading functionality
-  $('#load-image-btn').on('click', () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*'
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) {
-        rectangleTool.loadImage(file)
-      }
-    }
-    input.click()
-  })
-  
-  $('#remove-image-btn').on('click', () => {
-    rectangleTool.removeImage()
-  })
-  
-  $('#reset-image-btn').on('click', () => {
-    rectangleTool.resetImageTransform()
-  })
-  
-  $('#zoom-in-btn').on('click', () => {
-    rectangleTool.scaleImage(1.2)
-  })
-  
-  $('#zoom-out-btn').on('click', () => {
-    rectangleTool.scaleImage(0.8)
-  })
+  // Image controls
+  $('#load-image-btn').on('click', loadImage)
+  $('#remove-image-btn').on('click', removeImage)
+  $('#reset-image-btn').on('click', resetImage)
+  $('#zoom-in-btn').on('click', zoomIn)
+  $('#zoom-out-btn').on('click', zoomOut)
   
   // Image movement with arrow keys
   $(document).keydown((e: any) => {
