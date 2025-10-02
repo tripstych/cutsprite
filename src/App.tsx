@@ -128,7 +128,11 @@ function App() {
               <p>🔧 Drag existing slices to move them</p>
               <p>⌨️ Delete/Backspace: Remove selected</p>
               <p>⌨️ Escape: Clear all</p>
+              <p>⌨️ Tab/Shift+Tab: Navigate slices</p>
               <p>⌨️ Shift+Arrows: Move background image</p>
+              <p>⌨️ Arrow Keys: Nudge selected slice</p>
+              <p>⌨️ Alt+Arrow Keys: Resize selected slice</p>
+              <p>⌨️ Ctrl+Arrow Keys: Resize opposite edge</p>
               <hr />
               <p><strong>Anchors:</strong></p>
               <p>🎯 <span style={{color: '#ffaa00'}}>●</span> Inherited anchor (from group)</p>

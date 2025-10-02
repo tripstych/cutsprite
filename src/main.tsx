@@ -144,6 +144,12 @@ class SliceTool {
     this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this))
     this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this))
     this.canvas.addEventListener('contextmenu', this.handleRightClick.bind(this))
+    
+    // Keyboard controls - need to add to document for global access
+    document.addEventListener('keydown', this.handleKeyDown.bind(this))
+    
+    // Make canvas focusable for keyboard events
+    this.canvas.tabIndex = 0
   }
 
   private getMousePos(e: MouseEvent): { x: number, y: number } {
@@ -605,6 +611,87 @@ class SliceTool {
     } else {
       // Hide context menu if clicking on empty area
       this.hideContextMenu()
+    }
+  }
+
+  private handleKeyDown(e: KeyboardEvent) {
+    // Only handle arrow keys and only if we have selected slices
+    const selectedSlices = this.slices.filter(slice => slice.selected)
+    if (selectedSlices.length === 0) return
+
+    // Check if focus is on an input field - if so, don't handle keys
+    const activeElement = document.activeElement
+    if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+      return
+    }
+
+    const nudgeAmount = 1
+    let handled = false
+
+    selectedSlices.forEach(slice => {
+      if (e.altKey || e.ctrlKey) {
+        // Alt/Ctrl + Arrow Keys: Resize slice
+        let dx = 0, dy = 0, dw = 0, dh = 0
+        
+        // Determine direction based on key
+        switch (e.key) {
+          case 'ArrowUp':
+            dy = -1; dh = 1
+            handled = true
+            break
+          case 'ArrowDown':
+            dy = 0; dh = 1
+            handled = true
+            break
+          case 'ArrowLeft':
+            dx = -1; dw = 1
+            handled = true
+            break
+          case 'ArrowRight':
+            dx = 0; dw = 1
+            handled = true
+            break
+        }
+        
+        // Apply alt/ctrl logic to flip directions if needed
+        if (e.ctrlKey) {
+          dx = -dx; dy = -dy; dw = -dw; dh = -dh
+        }
+        
+        // Apply the changes
+        if (handled) {
+          slice.x += dx * nudgeAmount
+          slice.y += dy * nudgeAmount
+          slice.width = Math.max(1, slice.width + dw * nudgeAmount)
+          slice.height = Math.max(1, slice.height + dh * nudgeAmount)
+        }
+      } else {
+        // Arrow Keys: Nudge slice position
+        switch (e.key) {
+          case 'ArrowUp':
+            slice.y = Math.max(0, slice.y - nudgeAmount)
+            handled = true
+            break
+          case 'ArrowDown':
+            slice.y = Math.min(this.canvas.height - slice.height, slice.y + nudgeAmount)
+            handled = true
+            break
+          case 'ArrowLeft':
+            slice.x = Math.max(0, slice.x - nudgeAmount)
+            handled = true
+            break
+          case 'ArrowRight':
+            slice.x = Math.min(this.canvas.width - slice.width, slice.x + nudgeAmount)
+            handled = true
+            break
+        }
+      }
+    })
+
+    if (handled) {
+      e.preventDefault()
+      this.draw()
+      this.updateSliceImages()
     }
   }
 
@@ -1865,6 +1952,46 @@ class SliceTool {
     link.click()
   }
 
+  private exportAllSlicesAsSpriteSheet(allSlices: Slices[], cols: number, rows: number, maxWidth: number, maxHeight: number, filename: string) {
+    // Create canvas for the sprite sheet
+    const spriteCanvas = document.createElement('canvas')
+    const spriteCtx = spriteCanvas.getContext('2d')
+    
+    if (!spriteCtx) {
+      alert('Failed to create sprite sheet canvas')
+      return
+    }
+    
+    spriteCanvas.width = cols * maxWidth
+    spriteCanvas.height = rows * maxHeight
+    
+    // Fill with transparent background
+    spriteCtx.clearRect(0, 0, spriteCanvas.width, spriteCanvas.height)
+    
+    // Draw each slice onto the sprite sheet
+    allSlices.forEach((slice, index) => {
+      const col = index % cols
+      const row = Math.floor(index / cols)
+      const x = col * maxWidth
+      const y = row * maxHeight
+      
+      // Draw the background image portion for this slice
+      if (this.backgroundImage) {
+        spriteCtx.drawImage(
+          this.backgroundImage,
+          slice.x, slice.y, slice.width, slice.height,
+          x, y, slice.width, slice.height
+        )
+      }
+    })
+    
+    // Download the sprite sheet
+    const link = document.createElement('a')
+    link.download = filename
+    link.href = spriteCanvas.toDataURL()
+    link.click()
+  }
+
   /* you had it right the first time what was it .. format as 1 or 2 */
   public async exportAsTexturePacker(exportFormat = 1 | 2) {
     if (currentGroup.slices.length === 0) {
@@ -1874,8 +2001,16 @@ class SliceTool {
 
     const useIndividualImages = exportFormat === 1
 
-    // Calculate optimal grid layout (for sprite sheet mode)
-    const slicesCount = currentGroup.slices.length
+    // Calculate optimal grid layout
+    let allSlices = useIndividualImages ? currentGroup.slices : []
+    if (!useIndividualImages) {
+      // For sprite sheet mode, collect all slices from all groups
+      groups.forEach(group => {
+        allSlices = allSlices.concat(group.slices)
+      })
+    }
+    
+    const slicesCount = allSlices.length
     const cols = Math.ceil(Math.sqrt(slicesCount))
     const rows = Math.ceil(slicesCount / cols)
     
@@ -1883,7 +2018,7 @@ class SliceTool {
     let maxWidth = 0
     let maxHeight = 0
     
-    currentGroup.slices.forEach(slice => {
+    allSlices.forEach(slice => {
       maxWidth = Math.max(maxWidth, slice.width)
       maxHeight = Math.max(maxHeight, slice.height)
     })
@@ -1893,71 +2028,63 @@ class SliceTool {
 
     // Create the frames object for TexturePacker format
     const frames: { [key: string]: any } = {}
-    const allSliceNames: string[] = []
     
-    // Process all groups to get all slices
-    groups.forEach(group => {
-      group.slices.forEach((slice, sliceIndex) => {
-        // For individual images mode, only include current group
-        if (useIndividualImages && group !== currentGroup) return
-        
-        // Get the anchor for this slice (individual or inherited from group)
-        const anchor = slice.anchor || group.default_anchor
-        
-        // Calculate anchor point in pixels
+    // Process all slices for frames - need to collect ALL slices regardless of mode
+    let globalSliceIndex = 0
+    
+    if (useIndividualImages) {
+      // For individual images mode, only include current group
+      currentGroup.slices.forEach((slice) => {
+        const anchor = slice.anchor || currentGroup.default_anchor
         const anchorX = Math.round(slice.width * anchor.x)
         const anchorY = Math.round(slice.height * anchor.y)
-        
-        // Create slice name - just use slice ID for now, could be made customizable
         const sliceName = `slice_${slice.id}`
-        allSliceNames.push(sliceName)
         
-        let frameData
-        
-        if (useIndividualImages) {
-          // For individual images, each slice is its own image file
-          frameData = {
-            frame: {
-              x: 0,
-              y: 0,
-              w: slice.width,
-              h: slice.height
-            },
-            rotated: false,
-            trimmed: false,
-            spriteSourceSize: {
-              x: 0,
-              y: 0,
-              w: slice.width,
-              h: slice.height
-            },
-            sourceSize: {
-              w: slice.width,
-              h: slice.height
-            },
-            anchor: {
-              x: anchor.x,
-              y: anchor.y
-            },
-            pivot: {
-              x: anchorX,
-              y: anchorY
-            }
+        frames[sliceName] = {
+          frame: {
+            x: 0,
+            y: 0,
+            w: slice.width,
+            h: slice.height
+          },
+          rotated: false,
+          trimmed: false,
+          spriteSourceSize: {
+            x: 0,
+            y: 0,
+            w: slice.width,
+            h: slice.height
+          },
+          sourceSize: {
+            w: slice.width,
+            h: slice.height
+          },
+          anchor: {
+            x: anchor.x,
+            y: anchor.y
+          },
+          pivot: {
+            x: anchorX,
+            y: anchorY
           }
-        } else {
-          // For sprite sheet, calculate position in the sheet
-          const globalIndex = currentGroup.slices.findIndex(s => s.id === slice.id)
-          if (globalIndex === -1 && group !== currentGroup) return
+        }
+      })
+    } else {
+      // For sprite sheet mode, include ALL slices from ALL groups
+      groups.forEach(group => {
+        group.slices.forEach((slice) => {
+          const anchor = slice.anchor || group.default_anchor
+          const anchorX = Math.round(slice.width * anchor.x)
+          const anchorY = Math.round(slice.height * anchor.y)
+          const sliceName = `slice_${slice.id}`
           
-          const actualIndex = group === currentGroup ? sliceIndex : globalIndex
-          if (actualIndex === -1) return
-          
-          const col = actualIndex % cols
-          const row = Math.floor(actualIndex / cols)
+          // Calculate position in sprite sheet using global index
+          const col = globalSliceIndex % cols
+          const row = Math.floor(globalSliceIndex / cols)
           const x = col * maxWidth
           const y = row * maxHeight
           
-          frameData = {
+          frames[sliceName] = {
             frame: {
               x: x,
               y: y,
@@ -1985,11 +2112,11 @@ class SliceTool {
               y: anchorY
             }
           }
-        }
-        
-        frames[sliceName] = frameData
+          
+          globalSliceIndex++
+        })
       })
-    })
+    }
 
     // Create animations object with group names as keys and slice arrays as values
     const animations: { [key: string]: string[] } = {}
@@ -2060,8 +2187,8 @@ class SliceTool {
       // Export individual PNG files
       this.exportIndividualPNGs()
     } else {
-      // Export single sprite sheet
-      this.exportAsSpriteSheet()
+      // Export single sprite sheet with all slices
+      this.exportAllSlicesAsSpriteSheet(allSlices, cols, rows, maxWidth, maxHeight, `${currentGroup.name.replace(/\s+/g, '_')}_spritesheet.png`)
     }
   }
 
@@ -2539,10 +2666,10 @@ $(document).ready(() => {
     } else if (e.key === 'ArrowRight' && e.shiftKey) {
       e.preventDefault()
       slicerTool.moveImage(10, 0)
-    } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
+    } else if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault()
       slicerTool.prevFrame()
-    } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+    } else if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault()
       slicerTool.nextFrame()
     } else if (e.key === ' ') {
@@ -2552,6 +2679,10 @@ $(document).ready(() => {
       slicerTool.setFPS(slicerTool.fps + 1)
     } else if (e.key === '-') {
       slicerTool.setFPS(slicerTool.fps - 1)
+    } else if (e.key === 'd' && e.ctrlKey) {
+      e.preventDefault()
+      const selected = slicerTool.getSelectedSlices()[0];
+      if (selected) slicerTool.duplicateSlice(selected.id)
     }
   })
   
