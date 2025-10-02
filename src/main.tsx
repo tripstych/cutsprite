@@ -2029,9 +2029,6 @@ class SliceTool {
     // Create the frames object for TexturePacker format
     const frames: { [key: string]: any } = {}
     
-    // Process all slices for frames - need to collect ALL slices regardless of mode
-    let globalSliceIndex = 0
-    
     if (useIndividualImages) {
       // For individual images mode, only include current group
       currentGroup.slices.forEach((slice) => {
@@ -2070,51 +2067,47 @@ class SliceTool {
         }
       })
     } else {
-      // For sprite sheet mode, include ALL slices from ALL groups
-      groups.forEach(group => {
-        group.slices.forEach((slice) => {
-          const anchor = slice.anchor || group.default_anchor
-          const anchorX = Math.round(slice.width * anchor.x)
-          const anchorY = Math.round(slice.height * anchor.y)
-          const sliceName = `slice_${slice.id}`
-          
-          // Calculate position in sprite sheet using global index
-          const col = globalSliceIndex % cols
-          const row = Math.floor(globalSliceIndex / cols)
-          const x = col * maxWidth
-          const y = row * maxHeight
-          
-          frames[sliceName] = {
-            frame: {
-              x: x,
-              y: y,
-              w: slice.width,
-              h: slice.height
-            },
-            rotated: false,
-            trimmed: false,
-            spriteSourceSize: {
-              x: 0,
-              y: 0,
-              w: slice.width,
-              h: slice.height
-            },
-            sourceSize: {
-              w: slice.width,
-              h: slice.height
-            },
-            anchor: {
-              x: anchor.x,
-              y: anchor.y
-            },
-            pivot: {
-              x: anchorX,
-              y: anchorY
-            }
+      // For sprite sheet mode, use the SAME allSlices array to ensure consistent ordering
+      allSlices.forEach((slice, index) => {
+        const anchor = slice.anchor || slice.group?.default_anchor || ANCHOR_PRESETS.CENTER
+        const anchorX = Math.round(slice.width * anchor.x)
+        const anchorY = Math.round(slice.height * anchor.y)
+        const sliceName = `slice_${slice.id}`
+        
+        // Calculate position in sprite sheet using the same logic as sprite sheet generation
+        const col = index % cols
+        const row = Math.floor(index / cols)
+        const x = col * maxWidth
+        const y = row * maxHeight
+        
+        frames[sliceName] = {
+          frame: {
+            x: x,
+            y: y,
+            w: slice.width,
+            h: slice.height
+          },
+          rotated: false,
+          trimmed: false,
+          spriteSourceSize: {
+            x: 0,
+            y: 0,
+            w: slice.width,
+            h: slice.height
+          },
+          sourceSize: {
+            w: slice.width,
+            h: slice.height
+          },
+          anchor: {
+            x: anchor.x,
+            y: anchor.y
+          },
+          pivot: {
+            x: anchorX,
+            y: anchorY
           }
-          
-          globalSliceIndex++
-        })
+        }
       })
     }
 
