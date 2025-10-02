@@ -1736,10 +1736,11 @@ class SliceTool {
     // Show export options dialog
     const exportOption = await customPrompt(
       'Choose export option:\n' +
-      '1 - Individual PNG files (current behavior)\n' +
+      '1 - Individual PNG files\n' +
       '2 - ZIP file with all slices\n' +
       '3 - Single combined sprite sheet\n' +
-      'Enter 1, 2, or 3:', 
+      '4 - TexturePacker JSON + Sprite Sheet\n' +
+      'Enter 1, 2, 3, or 4:', 
       '1'
     )
     
@@ -1753,9 +1754,12 @@ class SliceTool {
       case '3':
         this.exportAsSpriteSheet()
         break
+      case '4':
+        this.exportAsTexturePacker()
+        break
       default:
         if (exportOption) {
-          alert('Invalid option. Please choose 1, 2, or 3.')
+          alert('Invalid option. Please choose 1, 2, 3, or 4.')
         }
     }
   }
@@ -1859,6 +1863,206 @@ class SliceTool {
     link.download = `${currentGroup.name}_spritesheet.png`
     link.href = spriteCanvas.toDataURL()
     link.click()
+  }
+
+  /* you had it right the first time what was it .. format as 1 or 2 */
+  public async exportAsTexturePacker(exportFormat = 1 | 2) {
+    if (currentGroup.slices.length === 0) {
+      alert('No slices to export!')
+      return
+    }
+
+    const useIndividualImages = exportFormat === 1
+
+    // Calculate optimal grid layout (for sprite sheet mode)
+    const slicesCount = currentGroup.slices.length
+    const cols = Math.ceil(Math.sqrt(slicesCount))
+    const rows = Math.ceil(slicesCount / cols)
+    
+    // Find the maximum slice dimensions
+    let maxWidth = 0
+    let maxHeight = 0
+    
+    currentGroup.slices.forEach(slice => {
+      maxWidth = Math.max(maxWidth, slice.width)
+      maxHeight = Math.max(maxHeight, slice.height)
+    })
+
+    const spriteSheetWidth = cols * maxWidth
+    const spriteSheetHeight = rows * maxHeight
+
+    // Create the frames object for TexturePacker format
+    const frames: { [key: string]: any } = {}
+    const allSliceNames: string[] = []
+    
+    // Process all groups to get all slices
+    groups.forEach(group => {
+      group.slices.forEach((slice, sliceIndex) => {
+        // For individual images mode, only include current group
+        if (useIndividualImages && group !== currentGroup) return
+        
+        // Get the anchor for this slice (individual or inherited from group)
+        const anchor = slice.anchor || group.default_anchor
+        
+        // Calculate anchor point in pixels
+        const anchorX = Math.round(slice.width * anchor.x)
+        const anchorY = Math.round(slice.height * anchor.y)
+        
+        // Create slice name - just use slice ID for now, could be made customizable
+        const sliceName = `slice_${slice.id}`
+        allSliceNames.push(sliceName)
+        
+        let frameData
+        
+        if (useIndividualImages) {
+          // For individual images, each slice is its own image file
+          frameData = {
+            frame: {
+              x: 0,
+              y: 0,
+              w: slice.width,
+              h: slice.height
+            },
+            rotated: false,
+            trimmed: false,
+            spriteSourceSize: {
+              x: 0,
+              y: 0,
+              w: slice.width,
+              h: slice.height
+            },
+            sourceSize: {
+              w: slice.width,
+              h: slice.height
+            },
+            anchor: {
+              x: anchor.x,
+              y: anchor.y
+            },
+            pivot: {
+              x: anchorX,
+              y: anchorY
+            }
+          }
+        } else {
+          // For sprite sheet, calculate position in the sheet
+          const globalIndex = currentGroup.slices.findIndex(s => s.id === slice.id)
+          if (globalIndex === -1 && group !== currentGroup) return
+          
+          const actualIndex = group === currentGroup ? sliceIndex : globalIndex
+          if (actualIndex === -1) return
+          
+          const col = actualIndex % cols
+          const row = Math.floor(actualIndex / cols)
+          const x = col * maxWidth
+          const y = row * maxHeight
+          
+          frameData = {
+            frame: {
+              x: x,
+              y: y,
+              w: slice.width,
+              h: slice.height
+            },
+            rotated: false,
+            trimmed: false,
+            spriteSourceSize: {
+              x: 0,
+              y: 0,
+              w: slice.width,
+              h: slice.height
+            },
+            sourceSize: {
+              w: slice.width,
+              h: slice.height
+            },
+            anchor: {
+              x: anchor.x,
+              y: anchor.y
+            },
+            pivot: {
+              x: anchorX,
+              y: anchorY
+            }
+          }
+        }
+        
+        frames[sliceName] = frameData
+      })
+    })
+
+    // Create animations object with group names as keys and slice arrays as values
+    const animations: { [key: string]: string[] } = {}
+    if (useIndividualImages) {
+      // For individual images, only include current group
+      if (currentGroup.slices.length > 0) {
+        const groupSliceNames = currentGroup.slices.map(slice => `slice_${slice.id}`)
+        animations[currentGroup.name.replace(/\s+/g, '_')] = groupSliceNames
+      }
+    } else {
+      // For sprite sheet, include all groups
+      groups.forEach(group => {
+        if (group.slices.length > 0) {
+          const groupSliceNames = group.slices.map(slice => `slice_${slice.id}`)
+          animations[group.name.replace(/\s+/g, '_')] = groupSliceNames
+        }
+      })
+    }
+
+    // Create the meta object based on export format
+    const metaData = useIndividualImages ? {
+      app: "CutSprite",
+      version: "1.0",
+      format: "RGBA8888",
+      scale: "1",
+      smartupdate: "$TexturePacker:SmartUpdate:0$"
+    } : {
+      app: "CutSprite",
+      version: "1.0",
+      image: `${currentGroup.name.replace(/\s+/g, '_')}_spritesheet.png`,
+      format: "RGBA8888",
+      size: {
+        w: spriteSheetWidth,
+        h: spriteSheetHeight
+      },
+      scale: "1",
+      frameTags: [
+        {
+          name: currentGroup.name,
+          from: 0,
+          to: currentGroup.slices.length - 1,
+          direction: "forward"
+        }
+      ]
+    }
+
+    // Create the complete TexturePacker JSON structure
+    const texturePackerData = {
+      frames: frames,
+      animations: animations,
+      meta: metaData
+    }
+
+    // Create and download the JSON file
+    const jsonString = JSON.stringify(texturePackerData, null, 2)
+    const blob = new Blob([jsonString], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.download = `${currentGroup.name.replace(/\s+/g, '_')}_atlas.json`
+    link.href = url
+    link.click()
+    
+    URL.revokeObjectURL(url)
+    
+    // Generate the appropriate image files
+    if (useIndividualImages) {
+      // Export individual PNG files
+      this.exportIndividualPNGs()
+    } else {
+      // Export single sprite sheet
+      this.exportAsSpriteSheet()
+    }
   }
 
   // Animation Control Methods
@@ -2037,13 +2241,13 @@ async function addGroup() {
   if (name && name.trim()) {
     const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dda0dd', '#98d8c8']
     const color = colors[groups.length % colors.length]
-    const newGroup = rectangleTool.createGroup(name.trim(), color)
-    rectangleTool.setCurrentGroup(newGroup)
+    const newGroup = slicerTool.createGroup(name.trim(), color)
+    slicerTool.setCurrentGroup(newGroup)
   }
 }
 
 function saveProject() {
-  const projectData = rectangleTool.saveProject()
+  const projectData = slicerTool.saveProject()
   const blob = new Blob([projectData], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -2063,7 +2267,7 @@ function loadProject() {
       const reader = new FileReader()
       reader.onload = (e) => {
         const content = e.target?.result as string
-        rectangleTool.loadProject(content)
+        slicerTool.loadProject(content)
       }
       reader.readAsText(file)
     }
@@ -2072,27 +2276,34 @@ function loadProject() {
 }
 
 function exportSingleImage() {
-  rectangleTool.exportAsSpriteSheet()
+  slicerTool.exportAsSpriteSheet()
 }
 
 function exportAllImages() {
-  rectangleTool.exportAsZip()
+  slicerTool.exportAsZip()
+}
+
+function exportTexturePackerSheet() {
+  slicerTool.exportAsTexturePacker(2);
+}
+function exportTexturePacker() {
+  slicerTool.exportAsTexturePacker(1);
 }
 
 function playPause() {
-  rectangleTool.playAnimation()
+  slicerTool.playAnimation()
 }
 
 function stop() {
-  rectangleTool.stopAnimation()
+  slicerTool.stopAnimation()
 }
 
 function prevFrame() {
-  rectangleTool.prevFrame()
+  slicerTool.prevFrame()
 }
 
 function nextFrame() {
-  rectangleTool.nextFrame()
+  slicerTool.nextFrame()
 }
 
 function loadImage() {
@@ -2102,43 +2313,43 @@ function loadImage() {
   input.onchange = (e) => {
     const file = (e.target as HTMLInputElement).files?.[0]
     if (file) {
-      rectangleTool.loadImage(file)
+      slicerTool.loadImage(file)
     }
   }
   input.click()
 }
 
 function removeImage() {
-  rectangleTool.removeImage()
+  slicerTool.removeImage()
 }
 
 function resetImage() {
-  rectangleTool.resetImageTransform()
+  slicerTool.resetImageTransform()
 }
 
 function zoomIn() {
-  rectangleTool.scaleImage(1.2)
+  slicerTool.scaleImage(1.2)
 }
 
 function zoomOut() {
-  rectangleTool.scaleImage(0.8)
+  slicerTool.scaleImage(0.8)
 }
 
 // Global reference to rectangleTool for functions
-let rectangleTool: SliceTool
+let slicerTool: SliceTool
 
 $(document).ready(() => {
   const canvas = $('#canvas')[0] as HTMLCanvasElement
   canvas.width = 1280
   canvas.height = 720
   
-  rectangleTool = new SliceTool(canvas)
+  slicerTool = new SliceTool(canvas)
   
   // Initialize groups UI
-  rectangleTool.updateGroupsList()
-  rectangleTool.updateCurrentGroupDisplay()
-  rectangleTool.updateSliceImages()
-  rectangleTool.initializeAnchorControls()
+  slicerTool.updateGroupsList()
+  slicerTool.updateCurrentGroupDisplay()
+  slicerTool.updateSliceImages()
+  slicerTool.initializeAnchorControls()
   
   // Add new group button
   $('#add-group-btn').on('click', addGroup)
@@ -2150,6 +2361,8 @@ $(document).ready(() => {
   // Export buttons
   $('#export-single-image').on('click', exportSingleImage)
   $('#export-all-images').on('click', exportAllImages)
+  $('#export-texture-packer').on('click', exportTexturePacker)
+  $('#export-texture-packer-sheet').on('click', exportTexturePackerSheet)
   
   // Animation controls
   $('#play-pause-btn').on('click', playPause)
@@ -2163,9 +2376,9 @@ $(document).ready(() => {
   $('#group-anchor-x, #group-anchor-y').on('input', () => {
     const x = Math.max(0, Math.min(1, parseFloat($('#group-anchor-x').val() as string) || 0))
     const y = Math.max(0, Math.min(1, parseFloat($('#group-anchor-y').val() as string) || 0))
-    rectangleTool.setGroupDefaultAnchor(currentGroup, { x, y })
-    rectangleTool.updateGroupAnchorVisual({ x, y })
-    rectangleTool.draw() // Redraw canvas to show updated anchor positions
+    slicerTool.setGroupDefaultAnchor(currentGroup, { x, y })
+    slicerTool.updateGroupAnchorVisual({ x, y })
+    slicerTool.draw() // Redraw canvas to show updated anchor positions
   })
   
   $('#group-anchor-preset').on('change', () => {
@@ -2174,58 +2387,58 @@ $(document).ready(() => {
       const preset = (ANCHOR_PRESETS as any)[presetKey]
       $('#group-anchor-x').val(preset.x.toFixed(2))
       $('#group-anchor-y').val(preset.y.toFixed(2))
-      rectangleTool.setGroupDefaultAnchor(currentGroup, preset)
-      rectangleTool.updateGroupAnchorVisual(preset)
-      rectangleTool.draw() // Redraw canvas to show updated anchor positions
+      slicerTool.setGroupDefaultAnchor(currentGroup, preset)
+      slicerTool.updateGroupAnchorVisual(preset)
+      slicerTool.draw() // Redraw canvas to show updated anchor positions
     }
   })
   
   // Slice anchor controls
   $('#slice-anchor-inherit').on('change', () => {
-    const selectedSlices = rectangleTool.getSelectedSlices()
+    const selectedSlices = slicerTool.getSelectedSlices()
     if (selectedSlices.length === 1) {
       const slice = selectedSlices[0]
       const isInherit = $('#slice-anchor-inherit').prop('checked')
       if (isInherit) {
-        rectangleTool.setSliceAnchor(slice, undefined)
+        slicerTool.setSliceAnchor(slice, undefined)
       } else {
         // Set to current group's default anchor as starting point
-        rectangleTool.setSliceAnchor(slice, currentGroup.default_anchor)
+        slicerTool.setSliceAnchor(slice, currentGroup.default_anchor)
         $('#slice-anchor-x').val(currentGroup.default_anchor.x.toFixed(2))
         $('#slice-anchor-y').val(currentGroup.default_anchor.y.toFixed(2))
-        rectangleTool.updateSliceAnchorVisual(currentGroup.default_anchor)
-        rectangleTool.updateSliceAnchorInfo(slice, currentGroup.default_anchor)
+        slicerTool.updateSliceAnchorVisual(currentGroup.default_anchor)
+        slicerTool.updateSliceAnchorInfo(slice, currentGroup.default_anchor)
       }
-      rectangleTool.draw() // Redraw canvas to show updated anchor positions
+      slicerTool.draw() // Redraw canvas to show updated anchor positions
     }
   })
   
   $('#slice-anchor-x, #slice-anchor-y').on('input', () => {
-    const selectedSlices = rectangleTool.getSelectedSlices()
+    const selectedSlices = slicerTool.getSelectedSlices()
     if (selectedSlices.length === 1) {
       const x = Math.max(0, Math.min(1, parseFloat($('#slice-anchor-x').val() as string) || 0))
       const y = Math.max(0, Math.min(1, parseFloat($('#slice-anchor-y').val() as string) || 0))
       const anchor = { x, y }
-      rectangleTool.setSliceAnchor(selectedSlices[0], anchor)
-      rectangleTool.updateSliceAnchorVisual(anchor)
-      rectangleTool.updateSliceAnchorInfo(selectedSlices[0], anchor)
-      rectangleTool.draw() // Redraw canvas to show updated anchor positions
+      slicerTool.setSliceAnchor(selectedSlices[0], anchor)
+      slicerTool.updateSliceAnchorVisual(anchor)
+      slicerTool.updateSliceAnchorInfo(selectedSlices[0], anchor)
+      slicerTool.draw() // Redraw canvas to show updated anchor positions
     }
   })
   
   $('#slice-anchor-preset').on('change', () => {
-    const selectedSlices = rectangleTool.getSelectedSlices()
+    const selectedSlices = slicerTool.getSelectedSlices()
     if (selectedSlices.length === 1) {
       const presetKey = $('#slice-anchor-preset').val() as string
       if (presetKey && (ANCHOR_PRESETS as any)[presetKey]) {
         const preset = (ANCHOR_PRESETS as any)[presetKey]
         $('#slice-anchor-x').val(preset.x.toFixed(2))
         $('#slice-anchor-y').val(preset.y.toFixed(2))
-        rectangleTool.setSliceAnchor(selectedSlices[0], preset)
-        rectangleTool.updateSliceAnchorVisual(preset)
-        rectangleTool.updateSliceAnchorInfo(selectedSlices[0], preset)
+        slicerTool.setSliceAnchor(selectedSlices[0], preset)
+        slicerTool.updateSliceAnchorVisual(preset)
+        slicerTool.updateSliceAnchorInfo(selectedSlices[0], preset)
       }
-      rectangleTool.draw() // Redraw canvas to show updated anchor positions
+      slicerTool.draw() // Redraw canvas to show updated anchor positions
     }
   })
 
@@ -2242,13 +2455,13 @@ $(document).ready(() => {
     // Update inputs and anchor
     $('#group-anchor-x').val(anchorX.toFixed(2))
     $('#group-anchor-y').val(anchorY.toFixed(2))
-    rectangleTool.setGroupDefaultAnchor(currentGroup, { x: anchorX, y: anchorY })
-    rectangleTool.updateGroupAnchorVisual({ x: anchorX, y: anchorY })
-    rectangleTool.draw()
+    slicerTool.setGroupDefaultAnchor(currentGroup, { x: anchorX, y: anchorY })
+    slicerTool.updateGroupAnchorVisual({ x: anchorX, y: anchorY })
+    slicerTool.draw()
   })
 
   $('#slice-anchor-grid').on('click', (e) => {
-    const selectedSlices = rectangleTool.getSelectedSlices()
+    const selectedSlices = slicerTool.getSelectedSlices()
     if (selectedSlices.length === 1) {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
       const x = (e.clientX - rect.left) / rect.width
@@ -2262,10 +2475,10 @@ $(document).ready(() => {
       $('#slice-anchor-x').val(anchorX.toFixed(2))
       $('#slice-anchor-y').val(anchorY.toFixed(2))
       const newAnchor = { x: anchorX, y: anchorY }
-      rectangleTool.setSliceAnchor(selectedSlices[0], newAnchor)
-      rectangleTool.updateSliceAnchorVisual(newAnchor)
-      rectangleTool.updateSliceAnchorInfo(selectedSlices[0], newAnchor)
-      rectangleTool.draw()
+      slicerTool.setSliceAnchor(selectedSlices[0], newAnchor)
+      slicerTool.updateSliceAnchorVisual(newAnchor)
+      slicerTool.updateSliceAnchorInfo(selectedSlices[0], newAnchor)
+      slicerTool.draw()
       
       // Uncheck inherit if it was checked
       $('#slice-anchor-inherit').prop('checked', false)
@@ -2311,34 +2524,34 @@ $(document).ready(() => {
   // FPS control with keyboard
   $(document).keydown((e: any) => {
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      rectangleTool.deleteSelected()
+      slicerTool.deleteSelected()
     } else if (e.key === 'Escape') {
-      rectangleTool.clearAll()
+      slicerTool.clearAll()
     } else if (e.key === 'ArrowUp' && e.shiftKey) {
       e.preventDefault()
-      rectangleTool.moveImage(0, -10)
+      slicerTool.moveImage(0, -10)
     } else if (e.key === 'ArrowDown' && e.shiftKey) {
       e.preventDefault()
-      rectangleTool.moveImage(0, 10)
+      slicerTool.moveImage(0, 10)
     } else if (e.key === 'ArrowLeft' && e.shiftKey) {
       e.preventDefault()
-      rectangleTool.moveImage(-10, 0)
+      slicerTool.moveImage(-10, 0)
     } else if (e.key === 'ArrowRight' && e.shiftKey) {
       e.preventDefault()
-      rectangleTool.moveImage(10, 0)
+      slicerTool.moveImage(10, 0)
     } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
       e.preventDefault()
-      rectangleTool.prevFrame()
+      slicerTool.prevFrame()
     } else if (e.key === 'ArrowRight' && !e.shiftKey) {
       e.preventDefault()
-      rectangleTool.nextFrame()
+      slicerTool.nextFrame()
     } else if (e.key === ' ') {
       e.preventDefault()
-      rectangleTool.playAnimation()
+      slicerTool.playAnimation()
     } else if (e.key === '+' || e.key === '=') {
-      rectangleTool.setFPS(rectangleTool.fps + 1)
+      slicerTool.setFPS(slicerTool.fps + 1)
     } else if (e.key === '-') {
-      rectangleTool.setFPS(rectangleTool.fps - 1)
+      slicerTool.setFPS(slicerTool.fps - 1)
     }
   })
   
@@ -2352,21 +2565,21 @@ $(document).ready(() => {
   // Image movement with arrow keys
   $(document).keydown((e: any) => {
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      rectangleTool.deleteSelected()
+      slicerTool.deleteSelected()
     } else if (e.key === 'Escape') {
-      rectangleTool.clearAll()
+      slicerTool.clearAll()
     } else if (e.key === 'ArrowUp' && e.shiftKey) {
       e.preventDefault()
-      rectangleTool.moveImage(0, -10)
+      slicerTool.moveImage(0, -10)
     } else if (e.key === 'ArrowDown' && e.shiftKey) {
       e.preventDefault()
-      rectangleTool.moveImage(0, 10)
+      slicerTool.moveImage(0, 10)
     } else if (e.key === 'ArrowLeft' && e.shiftKey) {
       e.preventDefault()
-      rectangleTool.moveImage(-10, 0)
+      slicerTool.moveImage(-10, 0)
     } else if (e.key === 'ArrowRight' && e.shiftKey) {
       e.preventDefault()
-      rectangleTool.moveImage(10, 0)
+      slicerTool.moveImage(10, 0)
     }
   })
 

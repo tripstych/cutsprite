@@ -679,6 +679,21 @@ select {
     background: #7B1FA2;
 }
 
+#export-texture-packer {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+#export-texture-packer:hover {
+    background: #45a049;
+}
+
 /* Anchor Control Styles */
 .anchor-control {
     background: white;
