@@ -1,7 +1,7 @@
 #app-container {
   color: #000;
   display: flex;
-  height: 100vh;
+  /* height: 100vh; */
   font-family: Verdana, Geneva, Tahoma, sans-serif;
   font-size: 12px;
 }
@@ -40,10 +40,23 @@ select {
 }
 
 /* Groups Panel */
+
+#project-panel {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+    background: #fafafa;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+} 
+
 #groups-panel {
-  flex: 1;
-  padding: 15px;
+    padding: 15px;
+    overflow-y: auto;
+    height: 240px;
+    display: block;
 }
+
 
 #groups-header {
   display: flex;
@@ -99,7 +112,7 @@ select {
 }
 
 #groups-list {
-  max-height: 400px;
+  /* max-height: 400px; */
 }
 
 .group-item {
@@ -155,11 +168,16 @@ select {
 }
 
 .group-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 2px;
 }
 
 .group-actions button {
+  border-color: #000 !important;
+  border-radius: 4px !important;
+  background-color: #2196F3 !important;
+  color: white;
   padding: 2px 4px;
   border: none;
   background: transparent;

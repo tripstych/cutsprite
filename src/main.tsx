@@ -1214,8 +1214,8 @@ class SliceTool {
       const groupElement = $(`
         <div class="group-item ${isActive ? 'active' : ''}" data-group-index="${index}">
           <div class="group-header">
-            <div class="group-color" style="background-color: ${group.color}"></div>
             <span class="group-name">${group.name}</span>
+            <div class="group-color" style="background-color: ${group.color}"></div>
             <span class="group-count">(${group.slices.length})</span>
             <div class="group-actions">
               <button class="btn-select" title="Select all slices in group">👁</button>

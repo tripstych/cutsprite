@@ -6,13 +6,15 @@ function App() {
     <>
       <div id="app-container">
         <div id="sidebar">
+          <div id="project-panel">
+            <button id="load-project-btn" title="Load project">� Load</button>
+            <button id="save-project-btn" title="Save project">� Save</button>
+          </div>
           <div id="groups-panel">
             <div id="groups-header">
               <h3>Groups & Slices</h3>
               <div id="groups-toolbar">
                 <button id="add-group-btn" title="Add new group">+ Group</button>
-                <button id="save-project-btn" title="Save project">� Save</button>
-                <button id="load-project-btn" title="Load project">� Load</button>
               </div>
             </div>
             <div id="groups-list"></div>
