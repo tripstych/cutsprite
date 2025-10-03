@@ -7,6 +7,10 @@ import JSZip from 'jszip'
 import type { Anchor, Groups, Slices } from './types'
 import { ANCHOR_PRESETS } from './types'
 
+// import notifyjs from 'notifyjs'
+// $.notify = notifyjs;
+// window.$ = $;
+
 let groups: Groups[] = [{
   name: "Group 1",
   color: "#ff6b6b",
@@ -99,6 +103,11 @@ function hideModal() {
   if (closeBtn) closeBtn.onclick = null;
   if (input) input.onkeydown = null;
 }
+
+function notify(message: string) {
+  $('<div/>').addClass('notification').text(message).appendTo('body').fadeIn().delay(3000).fadeOut();
+}
+
 
 // Custom prompt replacement
 async function customPrompt(message: string, defaultValue: string = ''): Promise<string | null> {
@@ -960,7 +969,7 @@ class SliceTool {
 
   public deleteGroup(group: Groups) {
     if (groups.length <= 1) {
-      alert("Cannot delete the last group!")
+      notify("Cannot delete the last group!")
       return
     }
     
@@ -1385,7 +1394,7 @@ class SliceTool {
       this.draw()
       
     } catch (error) {
-      alert('Invalid JSON data!')
+      notify('Invalid JSON data!')
     }
   }
 
@@ -1524,10 +1533,10 @@ class SliceTool {
       this.updateSliceImages()
       this.draw()
       
-      alert('Project loaded successfully!')
+      notify('Project loaded successfully!')
       
     } catch (error) {
-      alert('Invalid project file: ' + (error as Error).message)
+      notify('Invalid project file: ' + (error as Error).message)
     }
   }
 
@@ -1629,7 +1638,7 @@ class SliceTool {
 
   private pickColorAt(canvasX: number, canvasY: number) {
     if (!this.backgroundImage) {
-      alert('No background image loaded!')
+      notify('No background image loaded!')
       return
     }
 
@@ -1639,7 +1648,7 @@ class SliceTool {
 
     // Check if coordinates are within image bounds
     if (imageX < 0 || imageY < 0 || imageX >= this.backgroundImage.width || imageY >= this.backgroundImage.height) {
-      alert('Please click on the background image')
+      notify('Please click on the background image')
       return
     }
 
@@ -1648,7 +1657,7 @@ class SliceTool {
     const tempCtx = tempCanvas.getContext('2d')
     
     if (!tempCtx) {
-      alert('Failed to create processing canvas')
+      notify('Failed to create processing canvas')
       return
     }
 
@@ -1683,7 +1692,7 @@ class SliceTool {
 
   public replaceColorWithTransparency(targetColor: string, tolerance: number = 0) {
     if (!this.backgroundImage) {
-      alert('No background image loaded!')
+      notify('No background image loaded!')
       return
     }
 
@@ -1692,7 +1701,7 @@ class SliceTool {
     const tempCtx = tempCanvas.getContext('2d')
     
     if (!tempCtx) {
-      alert('Failed to create processing canvas')
+      notify('Failed to create processing canvas')
       return
     }
 
@@ -1956,7 +1965,7 @@ class SliceTool {
 
   public async exportSliceImages() {
     if (!this.backgroundImage || !currentGroup || currentGroup.slices.length === 0) {
-      alert('No slices to export!')
+      notify('No slices to export!')
       return
     }
     
@@ -2861,6 +2870,8 @@ $(document).ready(() => {
     }
   })
   
+  notify("Welcome to CutSprite! Start by loading an image and creating a group to begin slicing.")
+
   // Image controls
   $('#load-image-btn').on('click', loadImage)
   $('#remove-image-btn').on('click', removeImage)
