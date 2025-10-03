@@ -237,7 +237,8 @@ select {
 
 #image-toolbar {
   display: flex;
-  gap: 5px;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
@@ -248,7 +249,54 @@ select {
   border-radius: 3px;
   cursor: pointer;
   font-size: 11px;
+}
+
+.color-replacement-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.picked-color-display {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+#picked-color-swatch {
+  border-radius: 2px;
+  min-width: 30px;
+}
+
+.tolerance-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#tolerance-slider {
   flex: 1;
+  min-width: 80px;
+}
+
+#eyedropper-btn.active {
+  background: #ffe6cc !important;
+  border-color: #ff9900 !important;
+  color: #ff6600;
 }
 
 #image-toolbar button:hover {

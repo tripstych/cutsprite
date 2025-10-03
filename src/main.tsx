@@ -119,6 +119,11 @@ class SliceTool {
   private nextId = 1
   private snapThreshold = 10 // pixels
   private snapLines: { x: number[], y: number[] } = { x: [], y: [] }
+  
+  // Eye dropper properties
+  private isEyeDropperActive = false
+  private pickedColor = '#FFFFFF'
+  
   private backgroundImage: HTMLImageElement | null = null
   private imageScale = 1
   private imageOffsetX = 0
@@ -393,6 +398,14 @@ class SliceTool {
 
   private handleMouseDown(e: MouseEvent) {
     const pos = this.getMousePos(e)
+    
+    // Handle eye dropper mode
+    if (this.isEyeDropperActive) {
+      this.pickColorAt(pos.x, pos.y)
+      this.deactivateEyeDropper()
+      return
+    }
+    
     const clickedRect = this.findRectAtPoint(pos.x, pos.y)
 
     if (clickedRect) {
@@ -1602,6 +1615,133 @@ class SliceTool {
     $('#image-scale').text(`${Math.round(this.imageScale * 100)}%`)
   }
 
+  public activateEyeDropper() {
+    this.isEyeDropperActive = true
+    this.canvas.style.cursor = 'crosshair'
+    $('#eyedropper-btn').text('🎯 Click on Canvas').addClass('active')
+  }
+
+  public deactivateEyeDropper() {
+    this.isEyeDropperActive = false
+    this.canvas.style.cursor = 'default'
+    $('#eyedropper-btn').text('🔍 Eye Dropper').removeClass('active')
+  }
+
+  private pickColorAt(canvasX: number, canvasY: number) {
+    if (!this.backgroundImage) {
+      alert('No background image loaded!')
+      return
+    }
+
+    // Convert canvas coordinates to image coordinates
+    const imageX = (canvasX - this.imageOffsetX) / this.imageScale
+    const imageY = (canvasY - this.imageOffsetY) / this.imageScale
+
+    // Check if coordinates are within image bounds
+    if (imageX < 0 || imageY < 0 || imageX >= this.backgroundImage.width || imageY >= this.backgroundImage.height) {
+      alert('Please click on the background image')
+      return
+    }
+
+    // Create a temporary canvas to read pixel data
+    const tempCanvas = document.createElement('canvas')
+    const tempCtx = tempCanvas.getContext('2d')
+    
+    if (!tempCtx) {
+      alert('Failed to create processing canvas')
+      return
+    }
+
+    tempCanvas.width = this.backgroundImage.width
+    tempCanvas.height = this.backgroundImage.height
+
+    // Draw the background image
+    tempCtx.drawImage(this.backgroundImage, 0, 0)
+
+    // Get pixel data at the clicked position
+    const pixelData = tempCtx.getImageData(Math.floor(imageX), Math.floor(imageY), 1, 1).data
+    const r = pixelData[0]
+    const g = pixelData[1]
+    const b = pixelData[2]
+
+    // Convert to hex color
+    const hexColor = '#' + 
+      r.toString(16).padStart(2, '0') + 
+      g.toString(16).padStart(2, '0') + 
+      b.toString(16).padStart(2, '0')
+
+    this.pickedColor = hexColor.toUpperCase()
+    
+    // Update UI
+    $('#picked-color-swatch').css('backgroundColor', this.pickedColor)
+    $('#picked-color-value').text(this.pickedColor)
+  }
+
+  public getPickedColor(): string {
+    return this.pickedColor
+  }
+
+  public replaceColorWithTransparency(targetColor: string, tolerance: number = 0) {
+    if (!this.backgroundImage) {
+      alert('No background image loaded!')
+      return
+    }
+
+    // Create a temporary canvas to process the image
+    const tempCanvas = document.createElement('canvas')
+    const tempCtx = tempCanvas.getContext('2d')
+    
+    if (!tempCtx) {
+      alert('Failed to create processing canvas')
+      return
+    }
+
+    tempCanvas.width = this.backgroundImage.width
+    tempCanvas.height = this.backgroundImage.height
+
+    // Draw the current background image
+    tempCtx.drawImage(this.backgroundImage, 0, 0)
+
+    // Get image data
+    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
+    const data = imageData.data
+
+    // Parse target color (assuming hex format like "#FF0000")
+    const targetR = parseInt(targetColor.slice(1, 3), 16)
+    const targetG = parseInt(targetColor.slice(3, 5), 16)
+    const targetB = parseInt(targetColor.slice(5, 7), 16)
+
+    // Process each pixel
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i]
+      const g = data[i + 1]
+      const b = data[i + 2]
+
+      // Check if pixel matches target color within tolerance
+      const colorDistance = Math.sqrt(
+        Math.pow(r - targetR, 2) + 
+        Math.pow(g - targetG, 2) + 
+        Math.pow(b - targetB, 2)
+      )
+
+      if (colorDistance <= tolerance) {
+        // Make pixel transparent
+        data[i + 3] = 0 // Set alpha to 0
+      }
+    }
+
+    // Put the modified image data back
+    tempCtx.putImageData(imageData, 0, 0)
+
+    // Create new image from the modified canvas
+    const newImage = new Image()
+    newImage.onload = () => {
+      this.backgroundImage = newImage
+      this.draw()
+    }
+    newImage.src = tempCanvas.toDataURL()
+  }
+
   // Slice Image Display Functions
   public updateSliceImages() {
     const sliceImagesContainer = $('#slice-images')
@@ -2480,6 +2620,23 @@ function zoomOut() {
   slicerTool.scaleImage(0.8)
 }
 
+function activateEyeDropper() {
+  slicerTool.activateEyeDropper()
+}
+
+function replaceColor() {
+  const targetColor = slicerTool.getPickedColor()
+  const toleranceSlider = $('#tolerance-slider')
+  const tolerance = parseInt(toleranceSlider.val() as string)
+  
+  if (!targetColor || targetColor === '#FFFFFF') {
+    alert('Please use the eye dropper to pick a color first!')
+    return
+  }
+  
+  slicerTool.replaceColorWithTransparency(targetColor, tolerance)
+}
+
 // Global reference to rectangleTool for functions
 let slicerTool: SliceTool
 
@@ -2708,6 +2865,11 @@ $(document).ready(() => {
   $('#load-image-btn').on('click', loadImage)
   $('#remove-image-btn').on('click', removeImage)
   $('#reset-image-btn').on('click', resetImage)
+  $('#eyedropper-btn').on('click', activateEyeDropper)
+  $('#replace-color-btn').on('click', replaceColor)
+  $('#tolerance-slider').on('input', function() {
+    $('#tolerance-value').text($(this).val() as string)
+  })
   $('#zoom-in-btn').on('click', zoomIn)
   $('#zoom-out-btn').on('click', zoomOut)
   

@@ -111,6 +111,22 @@ function App() {
               <div id="image-toolbar">
                 <button id="load-image-btn" title="Load sprite sheet image">📁 Load Image</button>
                 <button id="remove-image-btn" title="Remove background image">🗑️</button>
+                <div className="color-replacement-section">
+                  <div className="color-picker-row">
+                    <button id="eyedropper-btn" title="Click to activate eye dropper, then click on canvas to pick color">🔍 Eye Dropper</button>
+                    <div className="picked-color-display">
+                      <span>Picked Color:</span>
+                      <div id="picked-color-swatch" style={{backgroundColor: '#FFFFFF', width: '30px', height: '20px', border: '1px solid #ccc', display: 'inline-block'}}></div>
+                      <span id="picked-color-value">#FFFFFF</span>
+                    </div>
+                  </div>
+                  <div className="tolerance-row">
+                    <label htmlFor="tolerance-slider">Tolerance:</label>
+                    <input type="range" id="tolerance-slider" min="0" max="255" defaultValue="10" />
+                    <span id="tolerance-value">10</span>
+                    <button id="replace-color-btn" title="Replace picked color with transparency">🎨 Remove Color</button>
+                  </div>
+                </div>
               </div>
               <div id="image-info" style={{display: 'none'}}>
                 <div className="image-detail">Size: <span id="image-dimensions"></span></div>
