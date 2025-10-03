@@ -112,7 +112,8 @@ function App() {
               <h5>Background Image</h5>
               <div id="image-toolbar">
                 <button id="load-image-btn" title="Load sprite sheet image">📁 Load Image</button>
-                <button id="remove-image-btn" title="Remove background image">🗑️</button>
+                <button id="remove-image-btn" title="Remove background image">🗑️ Remove Image</button>
+                <button id="toggle-checkerboard" className="checkerboard-button" title="Toggle checkerboard background">▦ Toggle</button>
                 <div className="color-replacement-section">
                   <div className="color-picker-row">
                     <button id="eyedropper-btn" title="Click to activate eye dropper, then click on canvas to pick color">🔍 Eye Dropper</button>

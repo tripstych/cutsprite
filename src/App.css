@@ -238,6 +238,8 @@ select {
   margin: 2px 0;
 }
 
+button { color: #000; }
+
 .notification {
   font-size: 72pt;
   position: fixed;
@@ -330,6 +332,12 @@ select {
   background: #ffe6cc !important;
   border-color: #ff9900 !important;
   color: #ff6600;
+}
+
+#toggle-checkerboard.active {
+  background: #e6f3ff !important;
+  border-color: #0066cc !important;
+  color: #0066cc;
 }
 
 #image-toolbar button:hover {

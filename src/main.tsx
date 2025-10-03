@@ -133,6 +133,10 @@ class SliceTool {
   private isEyeDropperActive = false
   private pickedColor = '#FFFFFF'
   
+  // Checkerboard properties
+  private checkerboardImage: HTMLImageElement | null = null
+  private showCheckerboard = false
+  
   private backgroundImage: HTMLImageElement | null = null
   private imageScale = 1
   private imageOffsetX = 0
@@ -149,6 +153,7 @@ class SliceTool {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     this.ctx = canvas.getContext('2d')!
+    this.loadCheckerboard()
     this.setupEventListeners()
     this.draw()
   }
@@ -721,6 +726,11 @@ class SliceTool {
     // Clear canvas
     this.ctx.fillStyle = 'lightgray'
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+    
+    // Draw checkerboard pattern if enabled
+    if (this.showCheckerboard && this.checkerboardImage) {
+      this.drawCheckerboardPattern()
+    }
     
     // Draw background image if loaded
     if (this.backgroundImage) {
@@ -1690,6 +1700,40 @@ class SliceTool {
     return this.pickedColor
   }
 
+  private loadCheckerboard() {
+    this.checkerboardImage = new Image()
+    this.checkerboardImage.onload = () => {
+      this.draw() // Redraw when checkerboard loads
+    }
+    this.checkerboardImage.src = '/checkerboard.svg'
+  }
+
+  public toggleCheckerboard() {
+    this.showCheckerboard = !this.showCheckerboard
+    const button = $('#toggle-checkerboard')
+    if (this.showCheckerboard) {
+      button.addClass('active')
+      button.attr('title', 'Hide checkerboard background')
+    } else {
+      button.removeClass('active')
+      button.attr('title', 'Show checkerboard background')
+    }
+    this.draw()
+  }
+
+  private drawCheckerboardPattern() {
+    if (!this.checkerboardImage) return
+    
+    const pattern = this.ctx.createPattern(this.checkerboardImage, 'repeat')
+    if (pattern) {
+      this.ctx.save()
+      this.ctx.fillStyle = pattern
+      this.ctx.globalAlpha = 0.3 // Make it subtle so it doesn't interfere with the main image
+      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+      this.ctx.restore()
+    }
+  }
+
   public replaceColorWithTransparency(targetColor: string, tolerance: number = 0) {
     if (!this.backgroundImage) {
       notify('No background image loaded!')
@@ -2646,6 +2690,10 @@ function replaceColor() {
   slicerTool.replaceColorWithTransparency(targetColor, tolerance)
 }
 
+function toggleCheckerboard() {
+  slicerTool.toggleCheckerboard()
+}
+
 // Global reference to rectangleTool for functions
 let slicerTool: SliceTool
 
@@ -2876,6 +2924,7 @@ $(document).ready(() => {
   $('#load-image-btn').on('click', loadImage)
   $('#remove-image-btn').on('click', removeImage)
   $('#reset-image-btn').on('click', resetImage)
+  $('#toggle-checkerboard').on('click', toggleCheckerboard)
   $('#eyedropper-btn').on('click', activateEyeDropper)
   $('#replace-color-btn').on('click', replaceColor)
   $('#tolerance-slider').on('input', function() {
