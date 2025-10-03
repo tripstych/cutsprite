@@ -4,6 +4,9 @@ A powerful web-based sprite sheet cutting tool built with React, TypeScript, and
 
 ![CutSprite Screenshot](Screenshot.png)
 
+[Check it out on Netlify!](https://cutsprite.netlify.app/)
+
+
 ## Features
 
 ### 🖼️ Image Management
