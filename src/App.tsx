@@ -167,7 +167,7 @@ function App() {
               <div id="export-buttons">
                 <button id="export-single-image" title="Export as single sprite sheet image">🇺️ Single Image</button>
                 <button id="export-all-images" title="Export all slices as ZIP file">🗂️ ZIP File</button>
-                <button id="export-texture-packer" title="Export as TexturePacker JSON + Sprite Sheet">📋 TexturePacker Singles</button>
+                {/* <button id="export-texture-packer" title="Export as TexturePacker JSON + Sprite Sheet">📋 TexturePacker Singles</button> */}
                 <button id="export-texture-packer-sheet" title="Export as TexturePacker JSON + Sprite Sheet">📋 TexturePacker Sheet</button>
               </div>
             </div>
