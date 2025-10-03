@@ -189,9 +189,7 @@ function App() {
           </div>
           </div>
 
-          <div id="container">
-            <canvas id="canvas"></canvas>
-          </div>
+          <div id="container"><canvas id="canvas"></canvas></div>
         </div>
       </div>
 
